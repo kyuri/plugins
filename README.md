@@ -17,3 +17,4 @@ Following workflow is supposed:
 
 For handling remote calls net/rpc package usage is supposed.
 A plugin must register object(s) that will be used for handling remote calls.
+
