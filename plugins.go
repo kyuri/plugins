@@ -194,6 +194,7 @@ func newRPCClient(name string, options ...*Options) (rpcClient, error) {
 // Host uses connected plugins for handling main application calls.
 type Host interface {
 	Serve()
+	Services() []string
 	Call(serviceName string, serviceMethod string, args interface{}, reply interface{}) error
 }
 
@@ -222,6 +223,14 @@ type host struct {
 
 func (h *host) Serve() {
 	go h.srv.Serve()
+}
+
+func (h *host) Services() []string {
+	rslt := make([]string, len(h.plugins))
+	for i, cp := range h.plugins {
+		rslt[i] = cp.info.ServiceName
+	}
+	return rslt
 }
 
 func (h *host) Call(serviceName string, serviceMethod string, args interface{}, reply interface{}) error {
