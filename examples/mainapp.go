@@ -10,6 +10,12 @@ func main() {
 	var arg int = 1
 	var rslt int
 	if h, err := plugins.NewHost("RPC host"); err == nil {
+		h.OnConnectPlugin(func (p plugins.PluginInfo) {
+			fmt.Printf("Main app notification: plugin \"%s\" connected!\n", p.Name)
+		})
+		h.OnDisconnectPlugin(func (p plugins.PluginInfo) {
+			fmt.Printf("Main app notification: plugin \"%s\" disconnected!\n", p.Name)
+		})
 		h.Serve()
 		for {
 			time.Sleep(time.Second)

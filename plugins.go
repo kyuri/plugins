@@ -190,11 +190,16 @@ func newRPCClient(name string, options ...*Options) (rpcClient, error) {
 
 }
 
+
+type PluginNotifyFunc func(p PluginInfo)
+
 // A Host is a manager that plugins connects to.
 // Host uses connected plugins for handling main application calls.
 type Host interface {
 	Serve()
 	Services() []string
+	OnConnectPlugin(f PluginNotifyFunc)
+	OnDisconnectPlugin(f PluginNotifyFunc)
 	Call(serviceName string, serviceMethod string, args interface{}, reply interface{}) error
 }
 
@@ -214,11 +219,13 @@ func (c *connectedPlugin) Call(serviceMethod string, args interface{}, reply int
 }
 
 type host struct {
-	srv			rpcServer
-	log			*log.Logger
-	nextPort	int					// free network port to connect
-	availPorts	[]int				// network ports that are returned by disconnected plugins
-	plugins		[]*connectedPlugin
+	srv				rpcServer
+	log				*log.Logger
+	nextPort		int					// free network port to connect
+	availPorts		[]int				// network ports that are returned by disconnected plugins
+	plugins			[]*connectedPlugin
+	onConnect		[]PluginNotifyFunc
+	onDisconnect	[]PluginNotifyFunc
 }
 
 func (h *host) Serve() {
@@ -231,6 +238,14 @@ func (h *host) Services() []string {
 		rslt[i] = cp.info.ServiceName
 	}
 	return rslt
+}
+
+func (h *host) OnConnectPlugin(f PluginNotifyFunc) {
+	h.onConnect = append(h.onConnect, f)
+}
+
+func (h *host) OnDisconnectPlugin(f PluginNotifyFunc) {
+	h.onDisconnect = append(h.onDisconnect, f)
 }
 
 func (h *host) Call(serviceName string, serviceMethod string, args interface{}, reply interface{}) error {
@@ -260,6 +275,9 @@ func (h *host) getNextPort() int {
 func (h *host) appendPlugin(cp *connectedPlugin) {
 	if i := h.indexOf(cp.info.ServiceName); i<0 {
 		h.plugins = append(h.plugins, cp)
+		for _, f := range h.onConnect {
+			f(*cp.info)
+		}
 	}
 }
 
@@ -269,6 +287,9 @@ func (h *host) removePlugin(serviceName string) {
 		var dummy int
 		cp.Call("RPCPlugin.Terminate", dummy, &dummy)
 		h.log.Printf("Plugin disconnected: \"%s\"", cp.info.Name)
+		for _, f := range h.onDisconnect {
+			f(*cp.info)
+		}
 		h.availPorts = append(h.availPorts, cp.info.Port)
 		h.plugins = append(h.plugins[:i], h.plugins[i+1:]...)
 	}
@@ -296,7 +317,9 @@ func NewHost(name string, options ...*Options) (Host, error) {
 		log: opt.Log,
 		nextPort: opt.Port+1,
 		availPorts: make([]int, 0),
-		plugins: make([]*connectedPlugin, 0)}
+		plugins: make([]*connectedPlugin, 0),
+		onConnect: make([]PluginNotifyFunc, 0),
+		onDisconnect: make([]PluginNotifyFunc, 0)}
 	srv, err := newRPCServer(&opt, &RPCHost{host: h})
 	if err == nil {
 		h.srv = srv
