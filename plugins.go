@@ -385,6 +385,7 @@ func (rh *RPCHost) mustBeConnected(info *PluginInfo) error {
 // Plugin is used for serving requests from main application.
 type Plugin interface {
 	Serve()
+	Call(serviceMethod string, args interface{}, reply interface{}) error
 }
 
 type plugin struct {
@@ -398,16 +399,20 @@ func (p *plugin) Serve() {
 	p.srv.Serve()
 }
 
+func (p *plugin) Call(serviceMethod string, args interface{}, reply interface{}) error {
+	return p.clnt.Call(serviceMethod, args, reply)
+}
+
 func (p *plugin) onServe() {
 	var dummy int
-	if err := p.clnt.Call("RPCHost.ConnectPlugin", p.info, &dummy); err != nil {
+	if err := p.Call("RPCHost.ConnectPlugin", p.info, &dummy); err != nil {
 		p.log.Fatal(err)
 	}
 }
 
 func (p *plugin) onStop() {
 	var dummy int
-	if err := p.clnt.Call("RPCHost.DisconnectPlugin", p.info, &dummy); err != nil {
+	if err := p.Call("RPCHost.DisconnectPlugin", p.info, &dummy); err != nil {
 		p.log.Println(err)
 	}
 }
