@@ -191,6 +191,7 @@ func newRPCClient(name string, options ...*Options) (rpcClient, error) {
 }
 
 
+// PluginNotifyFunc is a callback function to recieve notifications
 type PluginNotifyFunc func(p PluginInfo)
 
 // A Host is a manager that plugins connects to.
