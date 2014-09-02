@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"sync"
 	"net"
 	"net/rpc"
 )
@@ -128,8 +129,8 @@ func newRPCServer(opt *Options, rpcServices ...interface{}) (rpcServer, error) {
 	err := registerRPCServices(rpcServices...)
 	if err == nil {
 		opt.applyDefaults("RPC Server")
-		listener, err := net.Listen("tcp", opt.listenAddr())
-		if err == nil {
+		var listener net.Listener
+		if listener, err = net.Listen("tcp", opt.listenAddr()); err == nil {
 			opt.Log.Printf("Listening on %s\n", opt.listenAddr())
 			srv := &rpcSrv {
 				listener: listener,
@@ -192,7 +193,7 @@ func newRPCClient(name string, options ...*Options) (rpcClient, error) {
 
 
 // PluginNotifyFunc is a callback function to recieve notifications
-type PluginNotifyFunc func(p PluginInfo)
+type PluginNotifyFunc func(PluginInfo)
 
 // A Host is a manager that plugins connects to.
 // Host uses connected plugins for handling main application calls.
@@ -222,6 +223,7 @@ func (c *connectedPlugin) Call(serviceMethod string, args interface{}, reply int
 type host struct {
 	srv				rpcServer
 	log				*log.Logger
+	mutex			*sync.Mutex
 	nextPort		int					// free network port to connect
 	availPorts		[]int				// network ports that are returned by disconnected plugins
 	plugins			[]*connectedPlugin
@@ -242,10 +244,14 @@ func (h *host) Services() []string {
 }
 
 func (h *host) OnConnectPlugin(f PluginNotifyFunc) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 	h.onConnect = append(h.onConnect, f)
 }
 
 func (h *host) OnDisconnectPlugin(f PluginNotifyFunc) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 	h.onDisconnect = append(h.onDisconnect, f)
 }
 
@@ -262,6 +268,8 @@ func (h *host) Call(serviceName string, serviceMethod string, args interface{}, 
 }
 
 func (h *host) getNextPort() int {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 	var rslt int
 	if len(h.availPorts) > 0 {
 		i := len(h.availPorts) - 1
@@ -274,6 +282,8 @@ func (h *host) getNextPort() int {
 }
 
 func (h *host) appendPlugin(cp *connectedPlugin) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 	if i := h.indexOf(cp.info.ServiceName); i<0 {
 		h.plugins = append(h.plugins, cp)
 		for _, f := range h.onConnect {
@@ -283,6 +293,8 @@ func (h *host) appendPlugin(cp *connectedPlugin) {
 }
 
 func (h *host) removePlugin(serviceName string) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 	if i := h.indexOf(serviceName); i>=0 {
 		cp := h.plugins[i]
 		var dummy int
@@ -316,6 +328,7 @@ func NewHost(name string, options ...*Options) (Host, error) {
 	opt := prepareOptions(name, options...)
 	h := &host{
 		log: opt.Log,
+		mutex: &sync.Mutex{},
 		nextPort: opt.Port+1,
 		availPorts: make([]int, 0),
 		plugins: make([]*connectedPlugin, 0),
@@ -350,7 +363,8 @@ func (rh *RPCHost) ConnectPlugin(info *PluginInfo, _ *int) error {
 	err := rh.mustBeDisconnected(info)
 	if err == nil {
 		opt := prepareOptions(info.Name, &Options{Port: info.Port, Log: rh.host.log})
-		if clnt, err := newRPCClient(info.Name, &opt); err == nil {
+		var clnt rpcClient
+		if clnt, err = newRPCClient(info.Name, &opt); err == nil {
 			cp := &connectedPlugin{info: info, clnt: clnt}
 			rh.host.appendPlugin(cp)
 			rh.host.log.Printf("Plugin connected: \"%s\", handling \"%s\", serves at %s", cp.info.Name, cp.info.ServiceName, opt.dialAddr())
@@ -428,7 +442,8 @@ func NewPlugin(pluginName string, serviceName string, options ...*Options) (Plug
 		if err = clnt.Call("RPCHost.GetPort", info, &info.Port); err == nil {
 			p := &plugin{info: info, log: opt.Log, clnt: clnt}
 			srvOpt := prepareOptions(pluginName, &Options{Port: info.Port, Log: opt.Log})
-			if srv, err := newRPCServer(&srvOpt, &RPCPlugin{plugin: p}); err == nil {
+			var srv rpcServer
+			if srv, err = newRPCServer(&srvOpt, &RPCPlugin{plugin: p}); err == nil {
 				p.srv = srv
 				srv.onServe(p.onServe)
 				srv.onStop(p.onStop)
