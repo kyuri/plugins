@@ -76,8 +76,8 @@ type PluginInfo struct {
 // rpcServer represents an RPC Server.
 type rpcServer interface {
 	Serve()
-	onServe(func())
-	onStop(func())
+	OnServe(func())
+	OnStop(func())
 }
 
 type rpcSrv struct {
@@ -109,11 +109,11 @@ func (s *rpcSrv) Serve() {
 	}
 };
 
-func (s *rpcSrv) onServe(h func()) {
+func (s *rpcSrv) OnServe(h func()) {
 	s.serve = append(s.serve, h)
 }
 
-func (s *rpcSrv) onStop(h func()) {
+func (s *rpcSrv) OnStop(h func()) {
 	s.stop = append(s.stop, h)
 }
 
@@ -308,7 +308,7 @@ func (h *host) removePlugin(serviceName string) {
 	}
 }
 
-func (h *host) onStop() {
+func (h *host) hostStop() {
 	for len(h.plugins)>0 {
 		h.removePlugin(h.plugins[0].info.ServiceName)
 	}
@@ -337,7 +337,7 @@ func NewHost(name string, options ...*Options) (Host, error) {
 	srv, err := newRPCServer(&opt, &RPCHost{host: h})
 	if err == nil {
 		h.srv = srv
-		srv.onStop(h.onStop)
+		srv.OnStop(h.hostStop)
 		return h, nil
 	}
 	opt.Log.Println(err)
@@ -401,6 +401,8 @@ func (rh *RPCHost) mustBeConnected(info *PluginInfo) error {
 type Plugin interface {
 	Serve()
 	Call(serviceMethod string, args interface{}, reply interface{}) error
+	OnServe(func())
+	OnStop(func())
 }
 
 type plugin struct {
@@ -408,6 +410,8 @@ type plugin struct {
 	log		*log.Logger
 	srv		rpcServer
 	clnt	rpcClient
+	serve	[]func()
+	stop	[]func()
 }
 
 func (p *plugin) Serve() {
@@ -418,15 +422,33 @@ func (p *plugin) Call(serviceMethod string, args interface{}, reply interface{})
 	return p.clnt.Call(serviceMethod, args, reply)
 }
 
-func (p *plugin) onServe() {
+func (p *plugin) OnServe(h func()) {
+	p.serve = append(p.serve, h)
+}
+
+func (p *plugin) OnStop(h func()) {
+	p.stop = append(p.stop, h)
+}
+
+func (p *plugin) handleStop() {
+	for _, f := range p.stop {
+		f()
+	}
+}
+
+func (p *plugin) pluginServe() {
 	var dummy int
 	if err := p.Call("RPCHost.ConnectPlugin", p.info, &dummy); err != nil {
 		p.log.Fatal(err)
 	}
+	for _, f := range p.serve {
+		f()
+	}
 }
 
-func (p *plugin) onStop() {
+func (p *plugin) pluginStop() {
 	var dummy int
+	p.handleStop()
 	if err := p.Call("RPCHost.DisconnectPlugin", p.info, &dummy); err != nil {
 		p.log.Println(err)
 	}
@@ -445,8 +467,8 @@ func NewPlugin(pluginName string, serviceName string, options ...*Options) (Plug
 			var srv rpcServer
 			if srv, err = newRPCServer(&srvOpt, &RPCPlugin{plugin: p}); err == nil {
 				p.srv = srv
-				srv.onServe(p.onServe)
-				srv.onStop(p.onStop)
+				srv.OnServe(p.pluginServe)
+				srv.OnStop(p.pluginStop)
 				return p, nil
 			}
 		}
@@ -463,6 +485,7 @@ type RPCPlugin struct {
 
 // Terminate handles RPC Host termination.
 func (rp *RPCPlugin) Terminate(_ int, _ *int) error {
+	rp.plugin.handleStop()
 	rp.plugin.log.Println("Terminating by RPC host request")
 	os.Exit(0)
 	return nil
