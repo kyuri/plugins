@@ -5,13 +5,13 @@ import (
 )
 
 func ExampleNewHost() {
-	if h, err := plugins.NewHost("RPC host", &plugins.Options{Port: 5000}); err == nil {
+	if h, err := plugins.NewHost("RPC host", &plugins.Options{tcpPort: 5000}); err == nil {
 		h.Serve()
 	}
 }
 
 func ExampleNewPlugin() {
-	if p, err := plugins.NewPlugin("calculator", "calcService", &plugins.Options{Port: 5000}); err == nil {
+	if p, err := plugins.NewPlugin("calculator", "calcService", &plugins.Options{tcpPort: 5000}); err == nil {
 		p.Serve()
 	}
 }
