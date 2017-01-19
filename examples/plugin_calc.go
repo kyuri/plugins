@@ -23,7 +23,7 @@ func main() {
 	flag.Parse()
 	if err := rpc.Register(&Calculator{}); err == nil {
 		if p, err := plugins.NewPlugin("calculator (increments by one)", "calcService", &plugins.Options{Address: *rpcAddr}); err == nil {
-			defer p.Stop();
+			defer p.Stop()
 			p.Serve()
 		}
 	}
