@@ -35,8 +35,8 @@ import (
 )
 
 const (
-	SELFADDR     string = "127.0.0.1"
-	DEFAULT_PORT int    = 4000
+	selfaddr     string = "127.0.0.1"
+	default_port int    = 4000
 )
 
 // Options for RPC client/server.
@@ -77,13 +77,19 @@ func (o *Options) listenAddrDescription() string {
 func (o *Options) applyDefaults(logPrefix string) {
 	if o.network() == "tcp" {
 		if len(o.Address) == 0 {
-			o.Address = fmt.Sprintf("%s:%d", SELFADDR, DEFAULT_PORT)
+			o.Address = fmt.Sprintf("%s:%d", selfaddr, default_port)
 		} else if dp := strings.Index(o.Address, ":"); dp == 0 {
-			o.Address = SELFADDR + o.Address
+			o.Address = selfaddr + o.Address
 		} else if dp == len(o.Address) {
-			o.Address = fmt.Sprintf("%s%d", o.Address, DEFAULT_PORT)
+			o.Address = fmt.Sprintf("%s%d", o.Address, default_port)
 		} else {
-			// todo: analize o.Address is IP or Port
+			if port, err := strconv.ParseInt(o.Address, 10, 32); err == nil {
+				// o.Address is a number - assume that is port
+				o.Address = fmt.Sprintf("%s:%d", selfaddr, port)
+			} else {
+				// o.Address is not a number - assume that is IP address
+				o.Address = fmt.Sprintf("%s:%d", o.Address, default_port)
+			}
 		}
 	}
 	if o.Log == nil {
@@ -369,7 +375,7 @@ func (h *host) getListenAddr() (string, error) {
 			tcpPort = h.nextTcpPort
 			h.nextTcpPort++
 		}
-		return fmt.Sprintf("%s:%d", SELFADDR, tcpPort), nil
+		return fmt.Sprintf("%s:%d", selfaddr, tcpPort), nil
 	}
 	return getSocketAddr()
 }
