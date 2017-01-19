@@ -35,8 +35,8 @@ import (
 )
 
 const (
-	selfaddr     string = "127.0.0.1"
-	default_port int    = 4000
+	selfAddr    string = "127.0.0.1"
+	defaultPort int    = 4000
 )
 
 // Options for RPC client/server.
@@ -77,18 +77,18 @@ func (o *Options) listenAddrDescription() string {
 func (o *Options) applyDefaults(logPrefix string) {
 	if o.network() == "tcp" {
 		if len(o.Address) == 0 {
-			o.Address = fmt.Sprintf("%s:%d", selfaddr, default_port)
+			o.Address = fmt.Sprintf("%s:%d", selfAddr, defaultPort)
 		} else if dp := strings.Index(o.Address, ":"); dp == 0 {
-			o.Address = selfaddr + o.Address
+			o.Address = selfAddr + o.Address
 		} else if dp == len(o.Address) {
-			o.Address = fmt.Sprintf("%s%d", o.Address, default_port)
+			o.Address = fmt.Sprintf("%s%d", o.Address, defaultPort)
 		} else {
 			if port, err := strconv.ParseInt(o.Address, 10, 32); err == nil {
 				// o.Address is a number - assume that is port
-				o.Address = fmt.Sprintf("%s:%d", selfaddr, port)
+				o.Address = fmt.Sprintf("%s:%d", selfAddr, port)
 			} else {
 				// o.Address is not a number - assume that is IP address
-				o.Address = fmt.Sprintf("%s:%d", o.Address, default_port)
+				o.Address = fmt.Sprintf("%s:%d", o.Address, defaultPort)
 			}
 		}
 	}
@@ -375,7 +375,7 @@ func (h *host) getListenAddr() (string, error) {
 			tcpPort = h.nextTcpPort
 			h.nextTcpPort++
 		}
-		return fmt.Sprintf("%s:%d", selfaddr, tcpPort), nil
+		return fmt.Sprintf("%s:%d", selfAddr, tcpPort), nil
 	}
 	return getSocketAddr()
 }
