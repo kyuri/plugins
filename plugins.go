@@ -75,14 +75,13 @@ func (o *Options) listenAddrDescription() string {
 }
 
 func (o *Options) applyDefaults(logPrefix string) {
+	if o.Log == nil {
+		o.Log = log.New(os.Stdout, fmt.Sprintf("[%s] ", logPrefix), 0)
+	}
 	if o.network() == "tcp" {
 		if len(o.Address) == 0 {
 			o.Address = fmt.Sprintf("%s:%d", selfAddr, defaultPort)
-		} else if dp := strings.Index(o.Address, ":"); dp == 0 {
-			o.Address = selfAddr + o.Address
-		} else if dp == len(o.Address) {
-			o.Address = fmt.Sprintf("%s%d", o.Address, defaultPort)
-		} else {
+		} else if dp := strings.Index(o.Address, ":"); dp < 0 {
 			if port, err := strconv.ParseInt(o.Address, 10, 32); err == nil {
 				// o.Address is a number - assume that is port
 				o.Address = fmt.Sprintf("%s:%d", selfAddr, port)
@@ -90,10 +89,11 @@ func (o *Options) applyDefaults(logPrefix string) {
 				// o.Address is not a number - assume that is IP address
 				o.Address = fmt.Sprintf("%s:%d", o.Address, defaultPort)
 			}
+		} else if dp == 0 {
+			o.Address = selfAddr + o.Address
+		} else if dp == len(o.Address) {
+			o.Address = fmt.Sprintf("%s%d", o.Address, defaultPort)
 		}
-	}
-	if o.Log == nil {
-		o.Log = log.New(os.Stdout, fmt.Sprintf("[%s] ", logPrefix), 0)
 	}
 }
 
@@ -182,7 +182,6 @@ func (s *rpcSrv) OnStop(f func()) {
 func newRPCServer(opt *Options, rpcServices ...interface{}) (rpcServer, error) {
 	err := registerRPCServices(rpcServices...)
 	if err == nil {
-		opt.applyDefaults("RPC Server")
 		var listener net.Listener
 		if listener, err = getListener(opt); err == nil {
 			opt.Log.Printf("Listening on %s\n", opt.listenAddrDescription())
